@@ -1,0 +1,143 @@
+static_resources:
+  listeners:
+    - name: listener_0
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8080
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                codec_type: AUTO
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        text_format: "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% %RESPONSE_CODE_DETAILS% %BYTES_SENT% %BYTES_RECEIVED% \"%REQ(USER-AGENT)%\" \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\"\n"
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: backend
+                      domains: ["*"]
+                      routes:
+                        # Service1 Routes
+                        - match:
+                            prefix: "/api/service1/v1/"
+                          route:
+                            cluster: service1_grpc_cluster
+                            prefix_rewrite: "/api/service1/v1/"
+
+                        # Service2 Routes
+                        - match:
+                            prefix: "/api/service2/v1/"
+                          route:
+                            cluster: service2_grpc_cluster
+                            prefix_rewrite: "/api/service2/v1/"
+
+                        # Service3 Routes
+                        - match:
+                            prefix: "/api/service3/v1/"
+                          route:
+                            cluster: service3_grpc_cluster
+                            prefix_rewrite: "/api/service3/v1/"
+                http_filters:
+                  - name: envoy.filters.http.jwt_authn
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+                      providers:
+                        keycloak_provider:
+                          issuer: "http://keycloak.yourdomain.com/realms/YourRealm"
+                          remote_jwks:
+                            http_uri:
+                              uri: "http://keycloak.yourdomain.com/realms/YourRealm/protocol/openid-connect/certs"
+                              cluster: keycloak_cluster
+                              timeout: 5s
+                          from_headers:
+                            - name: "Authorization"
+                              value_prefix: "Bearer "
+                          forward: true
+                      rules:
+                        - match:
+                            prefix: "/"
+                          requires:
+                            provider_name: "keycloak_provider"
+
+                  - name: envoy.filters.http.grpc_json_transcoder
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_json_transcoder.v3.GrpcJsonTranscoder
+                      proto_descriptor: "/etc/envoy/proto_descriptor.pb"
+                      services: 
+                        - "service1.v1.Service1"
+                        - "service2.v1.Service2"
+                        - "service3.v1.Service3"
+                      print_options:
+                        add_whitespace: true
+                        always_print_primitive_fields: true
+                        always_print_enums_as_ints: false
+                        preserve_proto_field_names: false
+
+                  - name: envoy.filters.http.router
+
+  clusters:
+    - name: service1_grpc_cluster
+      connect_timeout: 0.25s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      http2_protocol_options: {}
+      load_assignment:
+        cluster_name: service1_grpc_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: service1.namespace.svc.cluster.local
+                      port_value: 50051
+
+    - name: service2_grpc_cluster
+      connect_timeout: 0.25s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      http2_protocol_options: {}
+      load_assignment:
+        cluster_name: service2_grpc_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: service2.namespace.svc.cluster.local
+                      port_value: 50052
+
+    - name: service3_grpc_cluster
+      connect_timeout: 0.25s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      http2_protocol_options: {}
+      load_assignment:
+        cluster_name: service3_grpc_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: service3.namespace.svc.cluster.local
+                      port_value: 50053
+
+    - name: keycloak_cluster
+      connect_timeout: 5s
+      type: LOGICAL_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: keycloak_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: keycloak.yourdomain.com
+                      port_value: 8080
