@@ -1,5 +1,14 @@
 # envoy-grpc-keycloak-jwt
 
+> ⚠️ **Reference implementation**
+>
+> This repository demonstrates one possible setup for Envoy + gRPC
+> authentication using Keycloak-issued JWTs.
+>
+> It is provided as a working example, not as a production-ready or
+> actively maintained solution.
+
+
 **Envoy gRPC Integration with Keycloak for JWT Authentication**
 
 ## Overview
